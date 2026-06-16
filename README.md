@@ -1,6 +1,6 @@
-# Selector Action Rules
+# Selector Action Rules - JS Injection
 
-Selector Action Rules is a Chrome Extension for attaching JavaScript actions to CSS selectors on a per-domain basis. It lets you define rules for the current website, optionally limit them by URL regex, and run custom JavaScript when matching elements receive events such as clicks, hover, change, focus, blur, or keyup.
+**Selector Action Rules - JS Injection** is a Chrome Extension for attaching JavaScript actions to CSS selectors on a per-domain basis. It lets you define rules for the current website, optionally limit them by URL regex, and run custom JavaScript when matching elements receive events such as clicks, hover, change, focus, blur, or keyup.
 
 The extension UI opens in Chrome's Side Panel so it can stay visible while you work with the page.
 
@@ -92,4 +92,4 @@ The extension requires Chrome 135 or newer.
 
 ## Notes
 
-This extension executes user-authored JavaScript on websites you configure. Only use scripts you trust, and be careful when importing JSON from another source.
+**IMPORTANT:** This extension executes user-authored JavaScript on websites you configure. Only use scripts you trust, and be careful when importing JSON from another source.
