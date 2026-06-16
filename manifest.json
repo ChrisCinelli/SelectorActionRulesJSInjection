@@ -3,11 +3,13 @@
   "name": "Selector Action Rules",
   "description": "Associate CSS selectors with JavaScript actions per domain and URL.",
   "version": "1.0.0",
+  "minimum_chrome_version": "135",
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
-    "tabs"
+    "tabs",
+    "userScripts"
   ],
   "host_permissions": [
     "<all_urls>"

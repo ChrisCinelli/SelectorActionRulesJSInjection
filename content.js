@@ -30,14 +30,16 @@ async function initSelectorActionRules() {
     return;
   }
 
-  attachSelectorActions(ruleSet);
+  await attachSelectorActions(ruleSet);
 
   if (ruleSet.runOnPageLoad) {
     await executeGlobalScript(ruleSet.globalScript, "page load");
   }
 }
 
-function attachSelectorActions(ruleSet) {
+async function attachSelectorActions(ruleSet) {
+  const injections = [];
+
   ruleSet.urlRules.forEach((urlRule, urlRuleIndex) => {
     if (!matchesCurrentUrl(urlRule.urlRegex, urlRuleIndex)) {
       return;
@@ -59,30 +61,14 @@ function attachSelectorActions(ruleSet) {
         return;
       }
 
-      let elements = [];
-      try {
-        elements = Array.from(document.querySelectorAll(selectorAction.selector));
-        console.log(elements);
-      } catch (error) {
-        console.error(`${SELECTOR_ACTION_LOG_PREFIX} Invalid selector`, {
-          selector: selectorAction.selector,
-          urlRuleIndex,
-          actionIndex,
-          error
-        });
-        return;
-      }
-
-      elements.forEach((element) => {
-        element.addEventListener(eventName, (event) => {
-          executeActionScript(selectorAction, element, event, {
-            urlRuleIndex,
-            actionIndex
-          });
-        });
-      });
+      injections.push(injectSelectorAction(selectorAction, eventName, {
+        urlRuleIndex,
+        actionIndex
+      }));
     });
   });
+
+  await Promise.all(injections);
 }
 
 function matchesCurrentUrl(urlRegex, urlRuleIndex) {
@@ -103,15 +89,24 @@ function matchesCurrentUrl(urlRegex, urlRuleIndex) {
   }
 }
 
-function executeActionScript(selectorAction, element, event, context) {
+async function injectSelectorAction(selectorAction, eventName, context) {
   try {
-    const runner = new Function("event", selectorAction.actionScript);
-    runner.call(element, event);
-  } catch (error) {
-    console.error(`${SELECTOR_ACTION_LOG_PREFIX} Error executing action script`, {
+    const response = await chrome.runtime.sendMessage({
+      type: "INJECT_SELECTOR_ACTION",
       selector: selectorAction.selector,
       trigger: selectorAction.trigger,
-      element,
+      eventName,
+      actionScript: selectorAction.actionScript,
+      context
+    });
+
+    if (response && response.ok === false) {
+      throw new Error(response.error || "Background script rejected selector action injection.");
+    }
+  } catch (error) {
+    console.error(`${SELECTOR_ACTION_LOG_PREFIX} Error injecting selector action`, {
+      selector: selectorAction.selector,
+      trigger: selectorAction.trigger,
       ...context,
       error
     });

@@ -1,4 +1,17 @@
 const BACKGROUND_LOG_PREFIX = "[Selector Action Rules]";
+const TRIGGER_EVENTS = {
+  onClick: "click",
+  onHover: "mouseover",
+  onChange: "change",
+  onFocus: "focus",
+  onBlur: "blur",
+  onKeyup: "keyup"
+};
+const MESSAGE_TYPES = [
+  "INJECT_SELECTOR_ACTION",
+  "RUN_GLOBAL_SCRIPT_FOR_TAB",
+  "RUN_GLOBAL_SCRIPT_SOURCE"
+];
 
 chrome.action.onClicked.addListener((tab) => {
   // This fires only if the extension action has no default_popup.
@@ -12,14 +25,14 @@ chrome.action.onClicked.addListener((tab) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message || !["RUN_GLOBAL_SCRIPT_FOR_TAB", "RUN_GLOBAL_SCRIPT_SOURCE"].includes(message.type)) {
+  if (!message || !MESSAGE_TYPES.includes(message.type)) {
     return false;
   }
 
-  handleRunGlobalScriptMessage(message, sender)
+  handleRuntimeMessage(message, sender)
     .then(() => sendResponse({ ok: true }))
     .catch((error) => {
-      console.error(`${BACKGROUND_LOG_PREFIX} Failed to run global script for popup request`, {
+      console.error(`${BACKGROUND_LOG_PREFIX} Failed to handle runtime request`, {
         message,
         sender,
         error
@@ -33,7 +46,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-async function handleRunGlobalScriptMessage(message, sender) {
+async function handleRuntimeMessage(message, sender) {
+  if (message.type === "INJECT_SELECTOR_ACTION") {
+    await handleInjectSelectorActionMessage(message, sender);
+    return;
+  }
+
   if (message.type === "RUN_GLOBAL_SCRIPT_SOURCE") {
     const tabId = sender.tab?.id;
 
@@ -41,7 +59,7 @@ async function handleRunGlobalScriptMessage(message, sender) {
       throw new Error("A sender tab is required to run a page-load global script.");
     }
 
-    await injectGlobalScript(tabId, message.source, message.reason || "page load");
+    await injectGlobalScript(tabId, message.source, message.reason || "page load", sender.frameId);
     return;
   }
 
@@ -53,6 +71,30 @@ async function handleRunGlobalScriptMessage(message, sender) {
 
   const tab = await chrome.tabs.get(tabId);
   await runGlobalScriptForTab(tab, message.reason || "extension icon click");
+}
+
+async function handleInjectSelectorActionMessage(message, sender) {
+  const tabId = sender.tab?.id;
+
+  if (!Number.isInteger(tabId)) {
+    throw new Error("A sender tab is required to inject a selector action.");
+  }
+
+  const eventName = typeof message.eventName === "string"
+    ? message.eventName
+    : TRIGGER_EVENTS[message.trigger];
+
+  if (!eventName) {
+    throw new Error(`Unsupported trigger: ${message.trigger}`);
+  }
+
+  await injectSelectorActionBinding(tabId, sender.frameId, {
+    selector: typeof message.selector === "string" ? message.selector : "",
+    trigger: typeof message.trigger === "string" ? message.trigger : "",
+    eventName,
+    actionScript: typeof message.actionScript === "string" ? message.actionScript : "",
+    context: isPlainObject(message.context) ? message.context : {}
+  });
 }
 
 async function runGlobalScriptForTab(tab, reason) {
@@ -81,27 +123,122 @@ async function runGlobalScriptForTab(tab, reason) {
   await injectGlobalScript(tab.id, ruleSet.globalScript, reason);
 }
 
-async function injectGlobalScript(tabId, source, reason) {
+async function injectGlobalScript(tabId, source, reason, frameId) {
   if (typeof source !== "string" || !source.trim()) {
     return;
   }
 
-  await chrome.scripting.executeScript({
-    target: { tabId },
+  await executeUserScript({
+    tabId,
+    frameId,
     world: "MAIN",
-    func: (source, executionReason) => {
+    code: buildGlobalScriptCode(source, reason)
+  });
+}
+
+async function injectSelectorActionBinding(tabId, frameId, details) {
+  if (!details.selector.trim() || !details.actionScript.trim()) {
+    return;
+  }
+
+  await executeUserScript({
+    tabId,
+    frameId,
+    code: buildSelectorActionBindingCode(details)
+  });
+}
+
+async function executeUserScript({ tabId, frameId, world = "USER_SCRIPT", code }) {
+  if (!chrome.userScripts?.execute) {
+    throw new Error(
+      "chrome.userScripts.execute is unavailable. Enable the extension's Allow User Scripts toggle in chrome://extensions, then reload the extension."
+    );
+  }
+
+  const target = { tabId };
+
+  if (Number.isInteger(frameId)) {
+    target.frameIds = [frameId];
+  }
+
+  const results = await chrome.userScripts.execute({
+    target,
+    injectImmediately: true,
+    world,
+    js: [{ code }]
+  });
+  const errors = results
+    .filter((result) => result.error)
+    .map((result) => result.error);
+
+  if (errors.length) {
+    throw new Error(errors.join("; "));
+  }
+}
+
+function buildGlobalScriptCode(source, reason) {
+  return `
+(() => {
+  const executionReason = ${JSON.stringify(reason)};
+  try {
+    (function () {
+${source}
+    }).call(window);
+  } catch (error) {
+    console.error(${JSON.stringify(`${BACKGROUND_LOG_PREFIX} Error executing global script`)}, {
+      reason: executionReason,
+      error
+    });
+  }
+})();
+`;
+}
+
+function buildSelectorActionBindingCode(details) {
+  const safeDetails = {
+    selector: details.selector,
+    trigger: details.trigger,
+    eventName: details.eventName,
+    context: details.context
+  };
+
+  return `
+(() => {
+  const details = ${JSON.stringify(safeDetails)};
+  let elements = [];
+
+  try {
+    elements = Array.from(document.querySelectorAll(details.selector));
+  } catch (error) {
+    console.error(${JSON.stringify(`${BACKGROUND_LOG_PREFIX} Invalid selector`)}, {
+      selector: details.selector,
+      trigger: details.trigger,
+      context: details.context,
+      error
+    });
+    return;
+  }
+
+  elements.forEach((element) => {
+    element.addEventListener(details.eventName, function (event) {
       try {
-        const runner = new Function(source);
-        runner.call(window);
+        (function (event) {
+${details.actionScript}
+        }).call(this, event);
       } catch (error) {
-        console.error("[Selector Action Rules] Error executing global script", {
-          reason: executionReason,
+        console.error(${JSON.stringify(`${BACKGROUND_LOG_PREFIX} Error executing action script`)}, {
+          selector: details.selector,
+          trigger: details.trigger,
+          element: this,
+          event,
+          context: details.context,
           error
         });
       }
-    },
-    args: [source, reason]
+    });
   });
+})();
+`;
 }
 
 function getHostname(url) {
