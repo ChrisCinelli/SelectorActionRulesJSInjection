@@ -12,6 +12,7 @@ The extension UI opens in Chrome's Side Panel so it can stay visible while you w
 - Lets you add selector/action rows inside each URL rule.
 - Automatically saves every input, checkbox, dropdown, and editor change to `chrome.storage.local`.
 - Imports and exports the full extension storage as JSON.
+- Uses delegated document-level event handling, so selector actions work for elements added after page load.
 - Runs selector action scripts with:
   - `this` set to the matched DOM element.
   - `event` set to the real DOM event.

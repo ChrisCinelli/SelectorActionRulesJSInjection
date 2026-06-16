@@ -253,10 +253,9 @@ function buildSelectorActionBindingCode(details) {
   return `
 (() => {
   const details = ${JSON.stringify(safeDetails)};
-  let elements = [];
 
   try {
-    elements = Array.from(document.querySelectorAll(details.selector));
+    document.documentElement.matches(details.selector);
   } catch (error) {
     console.error(${JSON.stringify(`${BACKGROUND_LOG_PREFIX} Invalid selector`)}, {
       selector: details.selector,
@@ -267,24 +266,50 @@ function buildSelectorActionBindingCode(details) {
     return;
   }
 
-  elements.forEach((element) => {
-    element.addEventListener(details.eventName, function (event) {
+  document.addEventListener(details.eventName, (event) => {
+    const path = getEventPath(event);
+    const matchedElements = path.filter((candidate) => {
+      return candidate instanceof Element && candidate.matches(details.selector);
+    });
+
+    for (const element of matchedElements) {
       try {
         (function (event) {
 ${details.actionScript}
-        }).call(this, event);
+        }).call(element, event);
       } catch (error) {
         console.error(${JSON.stringify(`${BACKGROUND_LOG_PREFIX} Error executing action script`)}, {
           selector: details.selector,
           trigger: details.trigger,
-          element: this,
+          element,
           event,
           context: details.context,
           error
         });
       }
-    }, { capture: true });
-  });
+
+      if (event.cancelBubble) {
+        break;
+      }
+    }
+  }, { capture: true });
+
+  function getEventPath(event) {
+    if (typeof event.composedPath === "function") {
+      return event.composedPath();
+    }
+
+    const path = [];
+    let current = event.target;
+
+    while (current) {
+      path.push(current);
+      current = current.parentNode || current.host;
+    }
+
+    path.push(window);
+    return path;
+  }
 })();
 `;
 }
