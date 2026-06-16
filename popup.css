@@ -1,0 +1,289 @@
+:root {
+  color-scheme: light;
+  --bg: #f5f7fa;
+  --panel: #ffffff;
+  --text: #18202b;
+  --muted: #657083;
+  --border: #d9e0e8;
+  --border-strong: #b8c3cf;
+  --accent: #0f766e;
+  --accent-hover: #115e59;
+  --danger: #b42318;
+  --danger-bg: #fff4f2;
+  --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 780px;
+  min-height: 520px;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.domain-label {
+  margin-top: 3px;
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.save-status {
+  min-width: 86px;
+  padding-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.app-shell {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px 18px;
+}
+
+.panel,
+.rule-block,
+.selector-row {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.panel {
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+
+.section-heading,
+.rule-heading,
+.row-toolbar,
+.button-row,
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-heading,
+.rule-heading {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.checkbox-row {
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.checkbox-label input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+}
+
+.url-rules {
+  display: grid;
+  gap: 14px;
+}
+
+.rule-block {
+  padding: 13px;
+}
+
+.rule-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.selector-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.selector-row {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: #fbfcfe;
+}
+
+.row-toolbar {
+  justify-content: space-between;
+}
+
+.row-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 5px;
+}
+
+.field-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+input[type="text"],
+select {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  color: var(--text);
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font: inherit;
+}
+
+input[type="text"]:focus,
+select:focus,
+.CodeMirror-focused {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.button {
+  min-height: 32px;
+  padding: 7px 11px;
+  color: var(--text);
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: #f1f5f9;
+}
+
+.button.primary {
+  color: #ffffff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.button.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.button.danger {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: #ffd0c8;
+}
+
+.button.compact {
+  min-height: 29px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.CodeMirror {
+  min-height: 150px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.CodeMirror-scroll {
+  min-height: 150px;
+}
+
+.rule-block .CodeMirror,
+.rule-block .CodeMirror-scroll {
+  min-height: 132px;
+}
+
+.empty-list,
+.empty-state {
+  padding: 16px;
+  color: var(--muted);
+  background: #ffffff;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.empty-state {
+  margin: 18px;
+}
+
+.import-export-panel {
+  margin-bottom: 2px;
+}
+
+@media (max-width: 640px) {
+  body {
+    width: 100vw;
+  }
+
+  .app-header,
+  .section-heading,
+  .rule-heading,
+  .row-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .save-status {
+    text-align: left;
+  }
+
+  .row-fields {
+    grid-template-columns: 1fr;
+  }
+}

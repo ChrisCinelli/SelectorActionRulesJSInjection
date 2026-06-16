@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Selector Action Rules</title>
+    <link rel="stylesheet" href="vendor/codemirror/lib/codemirror.css">
+    <link rel="stylesheet" href="vendor/codemirror/addon/hint/show-hint.css">
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>Selector Action Rules</h1>
+        <p id="domainLabel" class="domain-label">Loading current tab...</p>
+      </div>
+      <span id="saveStatus" class="save-status" aria-live="polite"></span>
+    </header>
+
+    <main id="app" class="app-shell" hidden>
+      <section class="panel">
+        <div class="section-heading">
+          <h2>Global Script</h2>
+        </div>
+        <textarea id="globalScript" aria-label="Global JavaScript editor"></textarea>
+        <div class="checkbox-row">
+          <label class="checkbox-label">
+            <input id="runOnPageLoad" type="checkbox">
+            <span>Run on page load</span>
+          </label>
+          <label class="checkbox-label">
+            <input id="runOnExtensionClick" type="checkbox">
+            <span>Run on extension icon click</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <h2>URL Rules</h2>
+          <button id="addUrlRule" class="button primary" type="button">Add URL Rule</button>
+        </div>
+        <div id="urlRules" class="url-rules"></div>
+      </section>
+
+      <section class="panel import-export-panel">
+        <div class="section-heading">
+          <h2>Import / Export</h2>
+        </div>
+        <div class="button-row">
+          <button id="exportButton" class="button" type="button">Export</button>
+          <button id="importButton" class="button" type="button">Import</button>
+          <input id="importFile" type="file" accept="application/json,.json" hidden>
+        </div>
+      </section>
+    </main>
+
+    <div id="emptyState" class="empty-state" hidden>
+      This page does not have a website domain that can store rules.
+    </div>
+
+    <script src="vendor/codemirror/lib/codemirror.js"></script>
+    <script src="vendor/codemirror/mode/javascript/javascript.js"></script>
+    <script src="vendor/codemirror/addon/hint/show-hint.js"></script>
+    <script src="vendor/codemirror/addon/hint/javascript-hint.js"></script>
+    <script src="vendor/codemirror/addon/edit/matchbrackets.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
