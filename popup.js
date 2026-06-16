@@ -13,6 +13,13 @@ const DEFAULT_STATE = {
   runOnExtensionClick: false,
   urlRules: []
 };
+const ACTION_SCRIPT_TEMPLATE = `// Context:
+// this  = the matched DOM element
+// event = the real DOM event
+// You can call event.preventDefault(), event.stopPropagation(),
+// or event.stopImmediatePropagation() here.
+
+`;
 
 const appEl = document.getElementById("app");
 const emptyStateEl = document.getElementById("emptyState");
@@ -190,7 +197,7 @@ function renderUrlRules() {
       rule.selectorActions.push({
         selector: "",
         trigger: "onClick",
-        actionScript: ""
+        actionScript: ACTION_SCRIPT_TEMPLATE
       });
       persistState();
       renderUrlRules();
@@ -267,8 +274,11 @@ function createSelectorActionRow(rule, ruleIndex, row, rowIndex) {
   actionField.className = "field";
   const actionLabel = document.createElement("span");
   actionLabel.className = "field-label";
-  actionLabel.textContent = "C. Action Script";
+  actionLabel.textContent = "C. Action Script (this = element, event = DOM event)";
   const textarea = document.createElement("textarea");
+  if (!row.actionScript.trim()) {
+    row.actionScript = ACTION_SCRIPT_TEMPLATE;
+  }
   textarea.value = row.actionScript;
   textarea.setAttribute("aria-label", `Action script for URL rule ${ruleIndex + 1}, row ${rowIndex + 1}`);
   actionField.append(actionLabel, textarea);

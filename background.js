@@ -235,7 +235,7 @@ ${details.actionScript}
           error
         });
       }
-    });
+    }, { capture: true });
   });
 })();
 `;
