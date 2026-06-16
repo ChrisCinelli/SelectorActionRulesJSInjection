@@ -12,17 +12,65 @@ const MESSAGE_TYPES = [
   "RUN_GLOBAL_SCRIPT_FOR_TAB",
   "RUN_GLOBAL_SCRIPT_SOURCE"
 ];
+const DOUBLE_CLICK_WINDOW_MS = 500;
+
+let pendingActionClick = null;
 
 chrome.action.onClicked.addListener((tab) => {
-  // This fires only if the extension action has no default_popup.
-  // popup.js sends the same request when the configured popup opens.
-  runGlobalScriptForTab(tab, "extension icon click").catch((error) => {
+  handleActionClick(tab).catch((error) => {
     console.error(`${BACKGROUND_LOG_PREFIX} Failed to handle action click`, {
       tabId: tab?.id,
       error
     });
   });
 });
+
+async function handleActionClick(tab) {
+  const now = Date.now();
+  const pending = pendingActionClick;
+  const isDoubleClick = pending
+    && pending.tabId === tab?.id
+    && now - pending.timestamp <= DOUBLE_CLICK_WINDOW_MS;
+
+  pendingActionClick = {
+    tabId: tab?.id,
+    timestamp: now
+  };
+
+  if (isDoubleClick) {
+    await runGlobalScriptForTab(tab, "extension icon double-click");
+    return;
+  }
+
+  await openRulesSidePanel(tab);
+}
+
+async function openRulesSidePanel(tab) {
+  const openOptions = {};
+
+  if (Number.isInteger(tab?.windowId)) {
+    openOptions.windowId = tab.windowId;
+  } else if (Number.isInteger(tab?.id)) {
+    openOptions.tabId = tab.id;
+  } else {
+    const [activeTab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true
+    });
+
+    if (Number.isInteger(activeTab?.windowId)) {
+      openOptions.windowId = activeTab.windowId;
+    } else if (Number.isInteger(activeTab?.id)) {
+      openOptions.tabId = activeTab.id;
+    }
+  }
+
+  if (!Number.isInteger(openOptions.windowId) && !Number.isInteger(openOptions.tabId)) {
+    throw new Error("A windowId or tabId is required to open the side panel.");
+  }
+
+  await chrome.sidePanel.open(openOptions);
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !MESSAGE_TYPES.includes(message.type)) {
@@ -70,7 +118,7 @@ async function handleRuntimeMessage(message, sender) {
   }
 
   const tab = await chrome.tabs.get(tabId);
-  await runGlobalScriptForTab(tab, message.reason || "extension icon click");
+  await runGlobalScriptForTab(tab, message.reason || "extension icon double-click");
 }
 
 async function handleInjectSelectorActionMessage(message, sender) {

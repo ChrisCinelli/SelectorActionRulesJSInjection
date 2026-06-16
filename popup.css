@@ -18,8 +18,9 @@
 }
 
 body {
-  width: 780px;
-  min-height: 520px;
+  width: 100%;
+  min-width: 320px;
+  min-height: 100vh;
   margin: 0;
   background: var(--bg);
   color: var(--text);

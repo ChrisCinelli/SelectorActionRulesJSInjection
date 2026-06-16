@@ -71,12 +71,6 @@ async function init() {
   emptyStateEl.hidden = true;
   render();
   bindStaticControls();
-
-  // Chrome does not fire action.onClicked while default_popup is configured.
-  // Opening this popup is the icon click path, so mirror that behavior here.
-  if (state.runOnExtensionClick) {
-    await requestGlobalScriptRun("popup icon click");
-  }
 }
 
 function bindStaticControls() {
@@ -389,22 +383,6 @@ async function importStorage(event) {
   } catch (error) {
     console.error("[Selector Action Rules] Import failed", error);
     showStatus("Import failed");
-  }
-}
-
-async function requestGlobalScriptRun(reason) {
-  try {
-    await chrome.runtime.sendMessage({
-      type: "RUN_GLOBAL_SCRIPT_FOR_TAB",
-      tabId: activeTab.id,
-      reason
-    });
-  } catch (error) {
-    console.error("[Selector Action Rules] Failed to run global script from popup", {
-      tabId: activeTab?.id,
-      reason,
-      error
-    });
   }
 }
 

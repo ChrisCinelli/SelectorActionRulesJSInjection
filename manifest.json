@@ -9,14 +9,17 @@
     "activeTab",
     "scripting",
     "tabs",
-    "userScripts"
+    "userScripts",
+    "sidePanel"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
   "action": {
-    "default_title": "Selector Action Rules",
-    "default_popup": "popup.html"
+    "default_title": "Selector Action Rules"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
   },
   "background": {
     "service_worker": "background.js"
