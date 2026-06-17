@@ -48,6 +48,10 @@ async function attachSelectorActions(ruleSet) {
       return;
     }
 
+    injections.push(injectRuleCss(urlRule.css, {
+      urlRuleIndex
+    }));
+
     urlRule.selectorActions.forEach((selectorAction, actionIndex) => {
       const eventName = TRIGGER_EVENTS[selectorAction.trigger];
 
@@ -72,6 +76,29 @@ async function attachSelectorActions(ruleSet) {
   });
 
   await Promise.all(injections);
+}
+
+async function injectRuleCss(css, context) {
+  if (!css.trim()) {
+    return;
+  }
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "INJECT_CSS_SOURCE",
+      css,
+      context
+    });
+
+    if (response && response.ok === false) {
+      throw new Error(response.error || "Background script rejected CSS injection.");
+    }
+  } catch (error) {
+    console.error(`${SELECTOR_ACTION_LOG_PREFIX} Error injecting CSS`, {
+      ...context,
+      error
+    });
+  }
 }
 
 function matchesCurrentUrl(urlRegex, urlRuleIndex) {
@@ -163,6 +190,7 @@ function normalizeUrlRule(rule) {
   const source = isPlainObject(rule) ? rule : {};
   return {
     urlRegex: typeof source.urlRegex === "string" ? source.urlRegex : "",
+    css: typeof source.css === "string" ? source.css : "",
     selectorActions: Array.isArray(source.selectorActions)
       ? source.selectorActions.map(normalizeSelectorAction)
       : []

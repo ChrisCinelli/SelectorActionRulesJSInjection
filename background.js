@@ -8,11 +8,13 @@ const TRIGGER_EVENTS = {
   onKeyup: "keyup"
 };
 const MESSAGE_TYPES = [
+  "INJECT_CSS_SOURCE",
   "INJECT_SELECTOR_ACTION",
   "RUN_GLOBAL_SCRIPT_FOR_TAB",
   "RUN_GLOBAL_SCRIPT_SOURCE"
 ];
 const DOUBLE_CLICK_WINDOW_MS = 500;
+const MANAGED_CSS_ATTRIBUTE = "data-selector-action-rules-css";
 
 let pendingActionClick = null;
 
@@ -41,7 +43,7 @@ async function handleActionClick(tab) {
   };
 
   if (isDoubleClick) {
-    await runGlobalScriptForTab(tab, "extension icon double-click");
+    await runExtensionClickActionsForTab(tab, "extension icon double-click");
     return;
   }
 
@@ -100,6 +102,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function handleRuntimeMessage(message, sender) {
+  if (message.type === "INJECT_CSS_SOURCE") {
+    await handleInjectCssMessage(message, sender);
+    return;
+  }
+
   if (message.type === "INJECT_SELECTOR_ACTION") {
     await handleInjectSelectorActionMessage(message, sender);
     return;
@@ -123,7 +130,20 @@ async function handleRuntimeMessage(message, sender) {
   }
 
   const tab = await chrome.tabs.get(tabId);
-  await runGlobalScriptForTab(tab, message.reason || "extension icon double-click");
+  await runExtensionClickActionsForTab(tab, message.reason || "extension icon double-click");
+}
+
+async function handleInjectCssMessage(message, sender) {
+  const tabId = sender.tab?.id;
+
+  if (!Number.isInteger(tabId)) {
+    throw new Error("A sender tab is required to inject CSS.");
+  }
+
+  await injectCssSource(tabId, sender.frameId, {
+    css: typeof message.css === "string" ? message.css : "",
+    context: isPlainObject(message.context) ? message.context : {}
+  });
 }
 
 async function handleInjectSelectorActionMessage(message, sender) {
@@ -150,7 +170,7 @@ async function handleInjectSelectorActionMessage(message, sender) {
   });
 }
 
-async function runGlobalScriptForTab(tab, reason) {
+async function runExtensionClickActionsForTab(tab, reason) {
   if (!tab?.id || !tab.url) {
     return;
   }
@@ -165,7 +185,13 @@ async function runGlobalScriptForTab(tab, reason) {
   const stored = await chrome.storage.local.get(storageKey);
   const ruleSet = normalizeRuleSet(stored[storageKey]);
 
-  if (!ruleSet?.runOnExtensionClick) {
+  if (!ruleSet) {
+    return;
+  }
+
+  await replaceMatchingCssForTab(tab, ruleSet);
+
+  if (!ruleSet.runOnExtensionClick) {
     return;
   }
 
@@ -200,6 +226,142 @@ async function injectSelectorActionBinding(tabId, frameId, details) {
     frameId,
     code: buildSelectorActionBindingCode(details)
   });
+}
+
+async function injectCssSource(tabId, frameId, details) {
+  if (!details.css.trim()) {
+    return;
+  }
+
+  // Page-load CSS arrives one URL rule at a time. Upsert by stable rule key
+  // so content-script reinjection updates the existing style instead of
+  // appending duplicates.
+  const key = getCssRuleKey(details.context);
+
+  try {
+    await upsertManagedCss(tabId, frameId, key, details.css);
+  } catch (error) {
+    console.error(`${BACKGROUND_LOG_PREFIX} Error injecting CSS`, {
+      context: details.context,
+      error
+    });
+    throw error;
+  }
+}
+
+async function replaceMatchingCssForTab(tab, ruleSet) {
+  // Double-click acts as a refresh: replace the whole managed CSS set for the
+  // current URL, removing styles from rules that no longer match or were deleted.
+  const entries = [];
+
+  ruleSet.urlRules.forEach((urlRule, urlRuleIndex) => {
+    if (!matchesUrlRule(tab.url, urlRule.urlRegex, urlRuleIndex)) {
+      return;
+    }
+
+    const css = typeof urlRule.css === "string" ? urlRule.css : "";
+
+    if (!css.trim()) {
+      return;
+    }
+
+    entries.push({
+      key: getCssRuleKey({ urlRuleIndex }),
+      css
+    });
+  });
+
+  await replaceManagedCssSet(tab.id, undefined, entries);
+}
+
+async function upsertManagedCss(tabId, frameId, key, css) {
+  const target = { tabId };
+
+  if (Number.isInteger(frameId)) {
+    target.frameIds = [frameId];
+  }
+
+  // Managed style tags give us a DOM handle to replace CSS. Repeated
+  // chrome.scripting.insertCSS() calls would stack duplicate stylesheet rules.
+  await chrome.scripting.executeScript({
+    target,
+    world: "ISOLATED",
+    func: (attributeName, styleKey, cssSource) => {
+      const styles = Array.from(document.querySelectorAll(`style[${attributeName}]`));
+      let style = styles.find((candidate) => candidate.getAttribute(attributeName) === styleKey);
+
+      if (!style) {
+        style = document.createElement("style");
+        style.setAttribute(attributeName, styleKey);
+        style.setAttribute("data-selector-action-rules-managed", "true");
+        (document.head || document.documentElement).append(style);
+      }
+
+      style.textContent = cssSource;
+    },
+    args: [MANAGED_CSS_ATTRIBUTE, key, css]
+  });
+}
+
+async function replaceManagedCssSet(tabId, frameId, entries) {
+  const target = { tabId };
+
+  if (Number.isInteger(frameId)) {
+    target.frameIds = [frameId];
+  }
+
+  // Full refresh path: remove any managed style whose URL rule is no longer
+  // active, then upsert the current matching rule CSS.
+  await chrome.scripting.executeScript({
+    target,
+    world: "ISOLATED",
+    func: (attributeName, nextEntries) => {
+      const nextKeys = new Set(nextEntries.map((entry) => entry.key));
+      const styles = Array.from(document.querySelectorAll(`style[${attributeName}]`));
+
+      styles.forEach((style) => {
+        if (!nextKeys.has(style.getAttribute(attributeName))) {
+          style.remove();
+        }
+      });
+
+      nextEntries.forEach((entry) => {
+        let style = styles.find((candidate) => candidate.getAttribute(attributeName) === entry.key);
+
+        if (!style || !style.isConnected) {
+          style = document.createElement("style");
+          style.setAttribute(attributeName, entry.key);
+          style.setAttribute("data-selector-action-rules-managed", "true");
+          (document.head || document.documentElement).append(style);
+        }
+
+        style.textContent = entry.css;
+      });
+    },
+    args: [MANAGED_CSS_ATTRIBUTE, entries]
+  });
+}
+
+function getCssRuleKey(context) {
+  return `url-rule-${Number.isInteger(context?.urlRuleIndex) ? context.urlRuleIndex : "unknown"}`;
+}
+
+function matchesUrlRule(href, urlRegex, urlRuleIndex) {
+  if (typeof urlRegex !== "string" || !urlRegex.trim()) {
+    return true;
+  }
+
+  try {
+    return new RegExp(urlRegex).test(href);
+  } catch (error) {
+    console.error(`${BACKGROUND_LOG_PREFIX} Invalid URL regex while refreshing CSS`, {
+      urlRegex,
+      href,
+      urlRuleIndex,
+      error
+    });
+    return false;
+  }
 }
 
 async function executeUserScript({ tabId, frameId, world = "USER_SCRIPT", code }) {

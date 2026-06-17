@@ -39,6 +39,7 @@ let domain = "";
 let storageKey = "";
 let state = structuredClone(DEFAULT_STATE);
 let globalEditor = null;
+let cssEditors = [];
 let rowEditors = [];
 let pendingSnapshot = null;
 let saveInFlight = false;
@@ -87,6 +88,7 @@ function bindStaticControls() {
   addUrlRuleEl.addEventListener("click", () => {
     state.urlRules.push({
       urlRegex: "",
+      css: "",
       selectorActions: []
     });
     persistState();
@@ -113,7 +115,7 @@ function render() {
   globalEditor = createCodeEditor(globalScriptEl, state.globalScript, (value) => {
     state.globalScript = value;
     persistState();
-  });
+  }, { mode: "javascript", autocomplete: true });
 
   renderUrlRules();
 }
@@ -121,7 +123,9 @@ function render() {
 function renderUrlRules() {
   // Row editors live inside generated rule blocks, so they must be disposed
   // before the container is cleared to keep CodeMirror state in sync.
+  cssEditors.forEach((editor) => editor.toTextArea());
   rowEditors.forEach((editor) => editor.toTextArea());
+  cssEditors = [];
   rowEditors = [];
   urlRulesEl.textContent = "";
 
@@ -173,6 +177,16 @@ function renderUrlRules() {
     });
     regexField.append(regexLabel, regexInput);
 
+    const cssField = document.createElement("label");
+    cssField.className = "field";
+    const cssLabel = document.createElement("span");
+    cssLabel.className = "field-label";
+    cssLabel.textContent = "Injected CSS (runs when this URL rule matches)";
+    const cssTextarea = document.createElement("textarea");
+    cssTextarea.value = rule.css;
+    cssTextarea.setAttribute("aria-label", `Injected CSS for URL rule ${ruleIndex + 1}`);
+    cssField.append(cssLabel, cssTextarea);
+
     const rowsContainer = document.createElement("div");
     rowsContainer.className = "selector-actions";
 
@@ -201,9 +215,19 @@ function renderUrlRules() {
       renderUrlRules();
     });
 
-    fields.append(regexField, rowsContainer, addRowButton);
+    fields.append(regexField, cssField, rowsContainer, addRowButton);
     block.append(heading, fields);
     urlRulesEl.append(block);
+
+    queueMicrotask(() => {
+      // CSS is scoped by the URL rule, so it is injected only when this rule's
+      // regex matches the current page. Empty regex means all pages on domain.
+      const editor = createCodeEditor(cssTextarea, rule.css, (value) => {
+        rule.css = value;
+        persistState();
+      }, { mode: "css" });
+      cssEditors.push(editor);
+    });
   });
 }
 
@@ -289,28 +313,25 @@ function createSelectorActionRow(rule, ruleIndex, row, rowIndex) {
     const editor = createCodeEditor(textarea, row.actionScript, (value) => {
       row.actionScript = value;
       persistState();
-    });
+    }, { mode: "javascript", autocomplete: true });
     rowEditors.push(editor);
   });
 
   return wrapper;
 }
 
-function createCodeEditor(textarea, value, onChange) {
+function createCodeEditor(textarea, value, onChange, options = {}) {
   textarea.value = value || "";
+  const { mode = "javascript", autocomplete = false } = options;
   const editor = CodeMirror.fromTextArea(textarea, {
-    mode: "javascript",
+    mode,
     lineNumbers: true,
     matchBrackets: true,
     tabSize: 2,
     indentUnit: 2,
     lineWrapping: true,
-    extraKeys: {
-      "Ctrl-Space": "autocomplete"
-    },
-    hintOptions: {
-      completeSingle: false
-    }
+    extraKeys: autocomplete ? { "Ctrl-Space": "autocomplete" } : {},
+    hintOptions: autocomplete ? { completeSingle: false } : undefined
   });
 
   editor.setSize("100%", null);
@@ -426,6 +447,7 @@ function normalizeUrlRule(rule) {
   const source = isPlainObject(rule) ? rule : {};
   return {
     urlRegex: typeof source.urlRegex === "string" ? source.urlRegex : "",
+    css: typeof source.css === "string" ? source.css : "",
     selectorActions: Array.isArray(source.selectorActions)
       ? source.selectorActions.map(normalizeSelectorAction)
       : []

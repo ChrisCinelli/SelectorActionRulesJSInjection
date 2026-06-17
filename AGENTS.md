@@ -12,7 +12,7 @@ Read `README.md` and `creation_prompt.md` before making large behavioral changes
 
 - `manifest.json`: MV3 manifest. Uses `sidePanel`, not `default_popup`.
 - `background.js`: service worker. Opens the Side Panel on normal toolbar click, runs the domain global script on toolbar double-click, and injects user-authored code with `chrome.userScripts.execute()`.
-- `content.js`: loads the current domain's rules at `document_idle`, filters URL rules, and asks the background worker to inject selector action bindings.
+- `content.js`: loads the current domain's rules at `document_idle`, filters URL rules, and asks the background worker to inject matching CSS plus selector action bindings.
 - `popup.html`, `popup.js`, `popup.css`: Side Panel UI. Despite the `popup` name, this is the Side Panel page.
 - `vendor/codemirror/`: local CodeMirror 5 assets. Do not replace with CDN scripts.
 - `README.md`: user-facing documentation.
@@ -28,6 +28,7 @@ Read `README.md` and `creation_prompt.md` before making large behavioral changes
 - User-authored code must be injected with `chrome.userScripts.execute()`.
 - Global scripts should run in `world: "MAIN"`.
 - Selector action scripts should run in `world: "USER_SCRIPT"`.
+- URL-rule CSS uses managed `<style>` tags injected by `chrome.scripting.executeScript()`. Upsert by URL-rule key on page load, and replace the whole managed CSS set on double-click refresh to avoid duplicate/stale styles.
 - Chrome may require users to enable **Allow User Scripts** on the extension details page.
 
 ## Selector Action Behavior
@@ -60,6 +61,7 @@ Shape:
     "urlRules": [
       {
         "urlRegex": "",
+        "css": "",
         "selectorActions": [
           {
             "selector": ".button",
@@ -79,6 +81,7 @@ Every UI input, checkbox, dropdown, and CodeMirror editor change must autosave. 
 
 - The UI must remain usable at Side Panel widths. Avoid fixed wide body sizes.
 - CodeMirror editors are created dynamically; refresh them after creation.
+- Each URL rule has a CSS CodeMirror editor. Keep its `css` field URL-rule scoped; empty regex means the CSS applies to all pages on that domain.
 - New or empty action script editors should include a comment explaining:
   - `this = matched DOM element`
   - `event = real DOM event`

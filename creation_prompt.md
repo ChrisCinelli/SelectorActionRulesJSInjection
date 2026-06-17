@@ -36,6 +36,7 @@ Store all state in `chrome.storage.local` under a key per domain:
     "urlRules": [
       {
         "urlRegex": "/checkout",
+        "css": ".checkout-button { outline: 2px solid red; }",
         "selectorActions": [
           {
             "selector": "button.submit",
@@ -56,6 +57,7 @@ Fields:
 - `runOnExtensionClick`: boolean, but the UI label must say **Run on extension icon double-click**
 - `urlRules`: array
 - `urlRegex`: string, optional; empty means all URLs on the domain
+- `css`: string CSS to inject when the URL rule matches
 - `selectorActions`: array
 - `selector`: string CSS selector
 - `trigger`: one of `onClick`, `onHover`, `onChange`, `onFocus`, `onBlur`, `onKeyup`
@@ -84,6 +86,7 @@ Create:
 - local CodeMirror assets under `vendor/codemirror/`
 
 Use CodeMirror 5 locally, not from a CDN, because extension pages should not rely on remote JavaScript and MV3 CSP blocks many remote/inline script patterns. 
+Include JavaScript and CSS modes so both script editors and URL-rule CSS editors have syntax highlighting.
 
 ## Manifest
 
@@ -138,6 +141,7 @@ The UI must contain:
    - List of URL rule blocks
    - Each URL rule block has:
      - text input labeled `URL Regex (optional)`
+     - CodeMirror CSS editor labeled `Injected CSS (runs when this URL rule matches)`
      - list of selector/action rows
      - `Add Row` button
      - `Remove Rule` button
@@ -180,6 +184,10 @@ Behavior:
    - If `urlRegex` is empty, it matches.
    - If `urlRegex` is set, compile it with `new RegExp(urlRegex)` and test `window.location.href`.
    - Log invalid regex errors with `{ urlRegex, href, urlRuleIndex, error }`.
+   - If the rule matches and has non-empty `css`, send it to the background service worker:
+     - `type: "INJECT_CSS_SOURCE"`
+     - `css`
+     - context with `urlRuleIndex`
 5. For every matching selector action:
    - Validate trigger mapping.
    - Send a message to the background service worker to inject a delegated selector action binding:
@@ -207,6 +215,7 @@ Do not use `eval()` or `new Function()` in `content.js`.
    - Do not delay opening the Side Panel while waiting to detect a double click. Delayed `openPopup()` / delayed open behavior is unreliable.
 
 2. Messages:
+   - `INJECT_CSS_SOURCE`
    - `INJECT_SELECTOR_ACTION`
    - `RUN_GLOBAL_SCRIPT_SOURCE`
    - `RUN_GLOBAL_SCRIPT_FOR_TAB`
@@ -216,6 +225,14 @@ Do not use `eval()` or `new Function()` in `content.js`.
    - For global scripts, execute in `world: "MAIN"` so the global script runs in page context.
    - For selector actions, execute in `world: "USER_SCRIPT"` to avoid page CSP and MV3 unsafe-eval restrictions.
    - Throw a useful error if `chrome.userScripts.execute` is unavailable, explaining that the user may need to enable **Allow User Scripts** and reload the extension.
+
+4. CSS injection:
+   - Use managed `<style>` tags injected by `chrome.scripting.executeScript()`, not repeated append-only CSS insertion.
+   - Scope page-load CSS upserts to the sender tab and frame when `sender.frameId` is available.
+   - Inject CSS only for URL rules that match the current page.
+   - Use a stable key per URL rule, such as `url-rule-${urlRuleIndex}`, and replace an existing managed style tag with the same key instead of appending another one.
+   - On extension icon double-click refresh, re-read storage, compute all matching URL-rule CSS for the active page, remove stale managed style tags, and replace/upsert the current set.
+   - Log insertion/replacement errors with URL rule context.
 
 ## Delegated Selector Action Binding
 
@@ -299,6 +316,7 @@ Create a README explaining:
 - single-click opens Side Panel
 - double-click runs global script when enabled
 - storage model
+- URL-rule scoped CSS injection
 - supported triggers
 - `this` and `event` in action scripts
 - dynamic DOM support via delegated handlers
@@ -316,6 +334,8 @@ After implementation, run at least these checks:
 - A mocked or browser-based test verifies:
   - Side Panel open is called on first action click.
   - A second action click within `500ms` runs the global script.
+  - Matching URL-rule CSS is injected and non-matching URL-rule CSS is not injected.
+  - Re-running CSS injection for the same URL rule replaces the existing managed style tag instead of creating duplicates.
   - Delegated selector action works for an element inserted after the binding code ran.
   - `this` is the matched element.
   - `event.preventDefault()` prevents link navigation.

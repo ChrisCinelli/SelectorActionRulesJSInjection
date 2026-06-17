@@ -9,6 +9,8 @@ The extension UI opens in Chrome's Side Panel so it can stay visible while you w
 - Stores rule sets per domain under keys such as `rules.example.com` in `chrome.storage.local`.
 - Provides a CodeMirror JavaScript editor for a domain-level global script.
 - Lets you add URL rule blocks, each with an optional regex matched against `window.location.href`.
+- Lets each URL rule inject CSS when its regex matches; an empty regex injects on all pages for the domain.
+- Replaces managed CSS on double-click refresh instead of appending duplicate styles.
 - Lets you add selector/action rows inside each URL rule.
 - Automatically saves every input, checkbox, dropdown, and editor change to `chrome.storage.local`.
 - Imports and exports the full extension storage as JSON.
@@ -48,6 +50,7 @@ All state is stored in `chrome.storage.local` using this shape:
     "urlRules": [
       {
         "urlRegex": "/checkout",
+        "css": ".checkout-button { outline: 2px solid red; }",
         "selectorActions": [
           {
             "selector": "button.submit",
