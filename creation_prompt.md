@@ -90,6 +90,16 @@ Create:
 
 Use CodeMirror 5 locally, not from a CDN, because extension pages should not rely on remote JavaScript and MV3 CSP blocks many remote/inline script patterns. 
 Include JavaScript and CSS modes so both script editors and URL-rule CSS editors have syntax highlighting.
+Bundle and load these CodeMirror addons locally:
+
+- `addon/hint/show-hint.js`
+- `addon/hint/javascript-hint.js`
+- `addon/hint/css-hint.js`
+- `addon/edit/matchbrackets.js`
+- `addon/comment/comment.js`
+- `addon/selection/active-line.js`
+- `addon/search/searchcursor.js`
+- `addon/search/match-highlighter.js`
 
 ## Manifest
 
@@ -139,6 +149,8 @@ The UI must contain:
    - JavaScript syntax highlighting
    - `show-hint` + `javascript-hint` autocomplete
    - match brackets
+   - active line highlighting
+   - selected-token match highlighting
    - checkbox: `Run on page load`
    - checkbox: `Run on extension icon double-click`
 
@@ -164,6 +176,17 @@ The UI must contain:
 Every input, checkbox, dropdown, and CodeMirror editor change must autosave on `input` or `change`. There must be no Save button.
 
 Autosave should prune storage-only empty drafts: adding an empty URL rule, changing only a regex, or leaving a new action row with only the default explanatory comment must not create a `rules.<domain>` key unless real JavaScript or CSS exists.
+
+CodeMirror editors must provide these shortcuts:
+
+- `Ctrl-A` / `Cmd-A`: `selectAll`
+- `Ctrl-Z` / `Cmd-Z`: `undo`
+- `Ctrl-Y` / `Ctrl-Shift-Z` / `Cmd-Shift-Z`: `redo`
+- `Alt-Shift-F` / `Ctrl-Alt-F`: `indentSelection`
+- `Ctrl-]` / `Cmd-]`: `indentMore`
+- `Ctrl-[` / `Cmd-[`: `indentLess`
+- `Ctrl-/` / `Cmd-/`: `toggleComment`
+- `Ctrl-Space`: `autocomplete`
 
 New or empty action script editors should start with this comment:
 

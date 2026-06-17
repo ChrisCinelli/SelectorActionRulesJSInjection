@@ -193,6 +193,15 @@ select:focus,
   outline: none;
 }
 
+.CodeMirror-activeline-background {
+  background: #f2f7ff;
+}
+
+.cm-matchhighlight {
+  background: rgba(245, 158, 11, 0.26);
+  border-radius: 2px;
+}
+
 .button {
   min-height: 32px;
   padding: 7px 11px;

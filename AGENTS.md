@@ -85,6 +85,8 @@ Do not persist empty domain objects. If a domain has no meaningful global JavaSc
 
 - The UI must remain usable at Side Panel widths. Avoid fixed wide body sizes.
 - CodeMirror editors are created dynamically; refresh them after creation.
+- CodeMirror uses local addons for `comment/comment.js`, `hint/css-hint.js`, `selection/active-line.js`, and `search/match-highlighter.js` plus `search/searchcursor.js` for match highlighting. Keep these local and loaded from `popup.html`.
+- Keep editor shortcuts centralized in `EDITOR_EXTRA_KEYS` in `popup.js`. For shifted shortcuts, include CodeMirror's emitted modifier order such as `Shift-Alt-F` because raw `extraKeys` objects are not normalized.
 - Each URL rule has a CSS CodeMirror editor. Keep its `css` field URL-rule scoped; empty regex means the CSS applies to all pages on that domain.
 - New or empty action script editors should include a comment explaining:
   - `this = matched DOM element`

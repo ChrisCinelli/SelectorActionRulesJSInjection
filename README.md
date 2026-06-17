@@ -39,6 +39,21 @@ Each domain can define one `globalScript`.
 
 A normal toolbar icon click opens the Side Panel.
 
+## Editor Shortcuts
+
+Code editors support common CodeMirror shortcuts:
+
+- `Ctrl-A` / `Cmd-A`: select all
+- `Ctrl-Z` / `Cmd-Z`: undo
+- `Ctrl-Y` / `Ctrl-Shift-Z` / `Cmd-Shift-Z`: redo
+- `Alt-Shift-F` / `Ctrl-Alt-F`: smart indent selection/current line
+- `Ctrl-]` / `Cmd-]`: indent more
+- `Ctrl-[` / `Cmd-[`: indent less
+- `Ctrl-/` / `Cmd-/`: toggle comment
+- `Ctrl-Space`: autocomplete
+
+The JavaScript and CSS editors also highlight the active line and matching selected text.
+
 ## Rule Model
 
 All state is stored in `chrome.storage.local` using this shape:

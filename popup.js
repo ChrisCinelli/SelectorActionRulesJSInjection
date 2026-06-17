@@ -20,6 +20,28 @@ const ACTION_SCRIPT_TEMPLATE = `// Context:
 // or event.stopImmediatePropagation() here.
 
 `;
+const EDITOR_EXTRA_KEYS = Object.freeze({
+  "Ctrl-A": "selectAll",
+  "Cmd-A": "selectAll",
+  "Ctrl-Z": "undo",
+  "Cmd-Z": "undo",
+  "Ctrl-Y": "redo",
+  "Shift-Ctrl-Z": "redo",
+  "Ctrl-Shift-Z": "redo",
+  "Shift-Cmd-Z": "redo",
+  "Cmd-Shift-Z": "redo",
+  "Shift-Alt-F": "indentSelection",
+  "Alt-Shift-F": "indentSelection",
+  "Ctrl-Alt-F": "indentSelection",
+  "Cmd-Alt-F": "indentSelection",
+  "Ctrl-]": "indentMore",
+  "Cmd-]": "indentMore",
+  "Ctrl-[": "indentLess",
+  "Cmd-[": "indentLess",
+  "Ctrl-/": "toggleComment",
+  "Cmd-/": "toggleComment",
+  "Ctrl-Space": "autocomplete"
+});
 
 const appEl = document.getElementById("app");
 const emptyStateEl = document.getElementById("emptyState");
@@ -46,11 +68,31 @@ let saveInFlight = false;
 let statusTimer = 0;
 let activeLoadId = 0;
 
+registerEditorCommands();
+
 init().catch((error) => {
   console.error("[Selector Action Rules] Failed to initialize popup", error);
   domainLabelEl.textContent = "Unable to load current tab";
   showStatus("Error loading popup");
 });
+
+function registerEditorCommands() {
+  CodeMirror.commands = CodeMirror.commands || {};
+
+  // CodeMirror exposes `indentSelection("smart")` as an editor method, not a
+  // named command. Register a command so keymaps and future toolbar buttons can
+  // call it consistently through editor.execCommand("indentSelection").
+  CodeMirror.commands.indentSelection = (editor) => {
+    editor.operation(() => {
+      if (editor.somethingSelected()) {
+        editor.indentSelection("smart");
+        return;
+      }
+
+      editor.indentLine(editor.getCursor().line, "smart");
+    });
+  };
+}
 
 async function init() {
   bindStaticControls();
@@ -280,7 +322,7 @@ function renderUrlRules() {
       const editor = createCodeEditor(cssTextarea, rule.css, (value) => {
         rule.css = value;
         persistState();
-      }, { mode: "css" });
+      }, { mode: "css", autocomplete: true });
       cssEditors.push(editor);
     });
   });
@@ -378,21 +420,55 @@ function createSelectorActionRow(rule, ruleIndex, row, rowIndex) {
 function createCodeEditor(textarea, value, onChange, options = {}) {
   textarea.value = value || "";
   const { mode = "javascript", autocomplete = false } = options;
+  const hintOptions = autocomplete ? { completeSingle: false } : undefined;
   const editor = CodeMirror.fromTextArea(textarea, {
     mode,
     lineNumbers: true,
     matchBrackets: true,
+    styleActiveLine: true,
+    highlightSelectionMatches: {
+      showToken: /[\w$-]/,
+      minChars: 2,
+      annotateScrollbar: false
+    },
     tabSize: 2,
     indentUnit: 2,
     lineWrapping: true,
-    extraKeys: autocomplete ? { "Ctrl-Space": "autocomplete" } : {},
-    hintOptions: autocomplete ? { completeSingle: false } : undefined
+    // Keep editor actions discoverable through standard shortcuts while the
+    // commands stay available to any future toolbar via editor.execCommand().
+    extraKeys: EDITOR_EXTRA_KEYS,
+    hintOptions
   });
 
   editor.setSize("100%", null);
   editor.on("change", (instance) => onChange(instance.getValue()));
+  bindEditorShortcutFallbacks(editor);
   setTimeout(() => editor.refresh(), 0);
   return editor;
+}
+
+function bindEditorShortcutFallbacks(editor) {
+  // CodeMirror receives shifted shortcuts as names like `Shift-Alt-F`, and
+  // some browsers/platforms can be fussy with Alt+Shift combinations. Catch
+  // the physical shortcut too so indenting still works when the keymap misses.
+  editor.getWrapperElement().addEventListener("keydown", (event) => {
+    const isF = event.key?.toLowerCase() === "f" || event.code === "KeyF";
+    const isPrimaryIndentShortcut = event.altKey
+      && event.shiftKey
+      && !event.ctrlKey
+      && !event.metaKey;
+    const isFallbackIndentShortcut = event.altKey
+      && (event.ctrlKey || event.metaKey)
+      && !event.shiftKey;
+
+    if (!isF || (!isPrimaryIndentShortcut && !isFallbackIndentShortcut)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    editor.execCommand("indentSelection");
+  }, true);
 }
 
 async function persistState() {
