@@ -16,6 +16,7 @@ initSelectorActionRules().catch((error) => {
 });
 
 async function initSelectorActionRules() {
+  // Rules are domain-scoped, so each page only loads the key for its hostname.
   const domain = window.location.hostname;
 
   if (!domain) {
@@ -38,6 +39,8 @@ async function initSelectorActionRules() {
 }
 
 async function attachSelectorActions(ruleSet) {
+  // The background worker injects delegated listeners in the USER_SCRIPT
+  // world. Content scripts only decide which rules apply to this URL.
   const injections = [];
 
   ruleSet.urlRules.forEach((urlRule, urlRuleIndex) => {
@@ -91,6 +94,8 @@ function matchesCurrentUrl(urlRegex, urlRuleIndex) {
 
 async function injectSelectorAction(selectorAction, eventName, context) {
   try {
+    // Do not evaluate actionScript here; content-script CSP rejects string
+    // execution. The service worker routes it through chrome.userScripts.
     const response = await chrome.runtime.sendMessage({
       type: "INJECT_SELECTOR_ACTION",
       selector: selectorAction.selector,
@@ -119,6 +124,8 @@ async function executeGlobalScript(globalScript, reason) {
   }
 
   try {
+    // Page-load global scripts are also delegated to the service worker so
+    // they can run in MAIN world without unsafe-eval.
     const response = await chrome.runtime.sendMessage({
       type: "RUN_GLOBAL_SCRIPT_SOURCE",
       source: globalScript,

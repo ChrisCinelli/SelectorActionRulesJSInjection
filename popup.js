@@ -99,6 +99,8 @@ function bindStaticControls() {
 }
 
 function render() {
+  // Rebuild CodeMirror instances on render because URL rules/rows are
+  // dynamic DOM. Always tear down the previous editor before recreating it.
   runOnPageLoadEl.checked = state.runOnPageLoad;
   runOnExtensionClickEl.checked = state.runOnExtensionClick;
 
@@ -117,6 +119,8 @@ function render() {
 }
 
 function renderUrlRules() {
+  // Row editors live inside generated rule blocks, so they must be disposed
+  // before the container is cleared to keep CodeMirror state in sync.
   rowEditors.forEach((editor) => editor.toTextArea());
   rowEditors = [];
   urlRulesEl.textContent = "";
@@ -280,6 +284,8 @@ function createSelectorActionRow(rule, ruleIndex, row, rowIndex) {
   wrapper.append(toolbar, fields, actionField);
 
   queueMicrotask(() => {
+    // Initialize after the textarea is attached; CodeMirror measures DOM
+    // dimensions during setup and refresh.
     const editor = createCodeEditor(textarea, row.actionScript, (value) => {
       row.actionScript = value;
       persistState();
@@ -314,6 +320,8 @@ function createCodeEditor(textarea, value, onChange) {
 }
 
 async function persistState() {
+  // Autosave can fire rapidly while typing. Keep only the newest normalized
+  // snapshot queued while a chrome.storage write is in flight.
   pendingSnapshot = normalizeState(state);
   showStatus("Saving...");
 

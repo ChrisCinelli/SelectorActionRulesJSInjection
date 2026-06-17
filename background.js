@@ -26,6 +26,9 @@ chrome.action.onClicked.addListener((tab) => {
 });
 
 async function handleActionClick(tab) {
+  // The manifest intentionally does not use default_popup; otherwise this
+  // onClicked handler would never fire. First click opens the Side Panel,
+  // a quick second click runs the page global script for the active domain.
   const now = Date.now();
   const pending = pendingActionClick;
   const isDoubleClick = pending
@@ -46,6 +49,8 @@ async function handleActionClick(tab) {
 }
 
 async function openRulesSidePanel(tab) {
+  // sidePanel.open() must run from the toolbar-click user gesture. Avoid
+  // delaying this call for double-click detection, or Chrome may reject it.
   const openOptions = {};
 
   if (Number.isInteger(tab?.windowId)) {
@@ -179,6 +184,7 @@ async function injectGlobalScript(tabId, source, reason, frameId) {
   await executeUserScript({
     tabId,
     frameId,
+    // Global scripts are meant to interact with the page's own JS globals.
     world: "MAIN",
     code: buildGlobalScriptCode(source, reason)
   });
@@ -197,6 +203,8 @@ async function injectSelectorActionBinding(tabId, frameId, details) {
 }
 
 async function executeUserScript({ tabId, frameId, world = "USER_SCRIPT", code }) {
+  // User-authored code must go through userScripts; MV3 CSP blocks eval-like
+  // execution in extension/content-script worlds, and page CSP can block tags.
   if (!chrome.userScripts?.execute) {
     throw new Error(
       "chrome.userScripts.execute is unavailable. Enable the extension's Allow User Scripts toggle in chrome://extensions, then reload the extension."
@@ -225,6 +233,8 @@ async function executeUserScript({ tabId, frameId, world = "USER_SCRIPT", code }
 }
 
 function buildGlobalScriptCode(source, reason) {
+  // Generate a real script body for userScripts.execute instead of using
+  // new Function. The wrapper keeps page-console errors actionable.
   return `
 (() => {
   const executionReason = ${JSON.stringify(reason)};
@@ -243,6 +253,8 @@ ${source}
 }
 
 function buildSelectorActionBindingCode(details) {
+  // Generate a delegated handler so selectors also match elements inserted
+  // after page load. The user code still sees the matched element as this.
   const safeDetails = {
     selector: details.selector,
     trigger: details.trigger,
@@ -255,6 +267,8 @@ function buildSelectorActionBindingCode(details) {
   const details = ${JSON.stringify(safeDetails)};
 
   try {
+    // Validate once up front; invalid selectors would otherwise throw on
+    // every matching event.
     document.documentElement.matches(details.selector);
   } catch (error) {
     console.error(${JSON.stringify(`${BACKGROUND_LOG_PREFIX} Invalid selector`)}, {
@@ -267,6 +281,9 @@ function buildSelectorActionBindingCode(details) {
   }
 
   document.addEventListener(details.eventName, (event) => {
+    // composedPath preserves the inner-to-outer event path, including shadow
+    // DOM boundaries where available. That lets child clicks bind this to the
+    // closest matching ancestor.
     const path = getEventPath(event);
     const matchedElements = path.filter((candidate) => {
       return candidate instanceof Element && candidate.matches(details.selector);
