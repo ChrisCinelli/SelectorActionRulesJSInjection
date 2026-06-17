@@ -41,9 +41,10 @@ let state = structuredClone(DEFAULT_STATE);
 let globalEditor = null;
 let cssEditors = [];
 let rowEditors = [];
-let pendingSnapshot = null;
+let pendingWrites = new Map();
 let saveInFlight = false;
 let statusTimer = 0;
+let activeLoadId = 0;
 
 init().catch((error) => {
   console.error("[Selector Action Rules] Failed to initialize popup", error);
@@ -52,26 +53,9 @@ init().catch((error) => {
 });
 
 async function init() {
-  activeTab = await getActiveTab();
-  domain = getHostname(activeTab?.url);
-
-  if (!domain) {
-    domainLabelEl.textContent = "Unsupported page";
-    appEl.hidden = true;
-    emptyStateEl.hidden = false;
-    return;
-  }
-
-  storageKey = `rules.${domain}`;
-  domainLabelEl.textContent = domain;
-
-  const stored = await chrome.storage.local.get(storageKey);
-  state = normalizeState(stored[storageKey]);
-
-  appEl.hidden = false;
-  emptyStateEl.hidden = true;
-  render();
   bindStaticControls();
+  bindTabRefreshControls();
+  await loadActiveTabState({ force: true });
 }
 
 function bindStaticControls() {
@@ -100,16 +84,90 @@ function bindStaticControls() {
   importFileEl.addEventListener("change", importStorage);
 }
 
+function bindTabRefreshControls() {
+  // The Side Panel stays open while users move between tabs, so refresh the
+  // editor whenever Chrome reports a new active tab or a top-level URL change.
+  chrome.tabs.onActivated.addListener(() => {
+    loadActiveTabState().catch(handleActiveTabLoadError);
+  });
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (tabId !== activeTab?.id || (!changeInfo.url && changeInfo.status !== "complete")) {
+      return;
+    }
+
+    loadActiveTabState().catch(handleActiveTabLoadError);
+  });
+
+  if (chrome.windows?.onFocusChanged) {
+    chrome.windows.onFocusChanged.addListener((windowId) => {
+      if (windowId === chrome.windows.WINDOW_ID_NONE) {
+        return;
+      }
+
+      loadActiveTabState().catch(handleActiveTabLoadError);
+    });
+  }
+}
+
+async function loadActiveTabState({ force = false } = {}) {
+  const loadId = ++activeLoadId;
+  const nextTab = await getActiveTab();
+  const nextDomain = getHostname(nextTab?.url);
+  const nextStorageKey = nextDomain ? `rules.${nextDomain}` : "";
+
+  if (loadId !== activeLoadId) {
+    return;
+  }
+
+  activeTab = nextTab;
+
+  if (!nextDomain) {
+    domain = "";
+    storageKey = "";
+    state = structuredClone(DEFAULT_STATE);
+    disposeEditors();
+    domainLabelEl.textContent = "Unsupported page";
+    appEl.hidden = true;
+    emptyStateEl.hidden = false;
+    return;
+  }
+
+  if (!force && nextStorageKey === storageKey) {
+    domain = nextDomain;
+    domainLabelEl.textContent = domain;
+    return;
+  }
+
+  const stored = await chrome.storage.local.get(nextStorageKey);
+
+  if (loadId !== activeLoadId) {
+    return;
+  }
+
+  domain = nextDomain;
+  storageKey = nextStorageKey;
+  state = normalizeState(stored[storageKey]);
+  await removeEmptyStoredState(storageKey, stored[storageKey], state);
+  domainLabelEl.textContent = domain;
+  appEl.hidden = false;
+  emptyStateEl.hidden = true;
+  render();
+}
+
+function handleActiveTabLoadError(error) {
+  console.error("[Selector Action Rules] Failed to refresh active tab", error);
+  domainLabelEl.textContent = "Unable to load current tab";
+  showStatus("Load failed");
+}
+
 function render() {
   // Rebuild CodeMirror instances on render because URL rules/rows are
   // dynamic DOM. Always tear down the previous editor before recreating it.
   runOnPageLoadEl.checked = state.runOnPageLoad;
   runOnExtensionClickEl.checked = state.runOnExtensionClick;
 
-  if (globalEditor) {
-    globalEditor.toTextArea();
-    globalEditor = null;
-  }
+  disposeEditors();
 
   globalScriptEl.value = state.globalScript;
   globalEditor = createCodeEditor(globalScriptEl, state.globalScript, (value) => {
@@ -123,10 +181,7 @@ function render() {
 function renderUrlRules() {
   // Row editors live inside generated rule blocks, so they must be disposed
   // before the container is cleared to keep CodeMirror state in sync.
-  cssEditors.forEach((editor) => editor.toTextArea());
-  rowEditors.forEach((editor) => editor.toTextArea());
-  cssEditors = [];
-  rowEditors = [];
+  disposeDynamicEditors();
   urlRulesEl.textContent = "";
 
   if (!state.urlRules.length) {
@@ -341,10 +396,15 @@ function createCodeEditor(textarea, value, onChange, options = {}) {
 }
 
 async function persistState() {
-  // Autosave can fire rapidly while typing. Keep only the newest normalized
-  // snapshot queued while a chrome.storage write is in flight.
-  pendingSnapshot = normalizeState(state);
-  showStatus("Saving...");
+  if (!storageKey) {
+    return;
+  }
+
+  // Autosave can fire rapidly while typing. Keep only the newest persistable
+  // snapshot per domain while a chrome.storage write is in flight.
+  const nextSnapshot = createStorageSnapshot(state);
+  pendingWrites.set(storageKey, nextSnapshot);
+  showStatus(nextSnapshot ? "Saving..." : "Clearing...");
 
   if (saveInFlight) {
     return;
@@ -352,15 +412,21 @@ async function persistState() {
 
   saveInFlight = true;
   try {
-    while (pendingSnapshot) {
-      const snapshot = pendingSnapshot;
-      pendingSnapshot = null;
-      await chrome.storage.local.set({ [storageKey]: snapshot });
+    while (pendingWrites.size) {
+      const [nextStorageKey, snapshot] = pendingWrites.entries().next().value;
+      pendingWrites.delete(nextStorageKey);
+
+      if (snapshot) {
+        await chrome.storage.local.set({ [nextStorageKey]: snapshot });
+      } else {
+        await chrome.storage.local.remove(nextStorageKey);
+      }
     }
+
     showStatus("Saved");
   } catch (error) {
     console.error("[Selector Action Rules] Failed to save rules", {
-      storageKey,
+      pendingKeys: Array.from(pendingWrites.keys()),
       error
     });
     showStatus("Save failed");
@@ -465,6 +531,96 @@ function normalizeSelectorAction(action) {
     trigger,
     actionScript: typeof source.actionScript === "string" ? source.actionScript : ""
   };
+}
+
+function createStorageSnapshot(value) {
+  const normalized = normalizeState(value);
+  const hasGlobalScript = hasMeaningfulJavaScript(normalized.globalScript);
+  const urlRules = normalized.urlRules
+    .map(createStorageUrlRule)
+    .filter(Boolean);
+
+  if (!hasGlobalScript && !urlRules.length) {
+    return null;
+  }
+
+  return {
+    globalScript: hasGlobalScript ? normalized.globalScript : "",
+    runOnPageLoad: normalized.runOnPageLoad,
+    runOnExtensionClick: normalized.runOnExtensionClick,
+    urlRules
+  };
+}
+
+function createStorageUrlRule(rule) {
+  const hasCss = hasMeaningfulCss(rule.css);
+  const selectorActions = rule.selectorActions
+    .map(createStorageSelectorAction)
+    .filter(Boolean);
+
+  if (!hasCss && !selectorActions.length) {
+    return null;
+  }
+
+  return {
+    urlRegex: rule.urlRegex,
+    css: hasCss ? rule.css : "",
+    selectorActions
+  };
+}
+
+function createStorageSelectorAction(action) {
+  if (!hasMeaningfulJavaScript(action.actionScript)) {
+    return null;
+  }
+
+  return {
+    selector: action.selector,
+    trigger: action.trigger,
+    actionScript: action.actionScript
+  };
+}
+
+async function removeEmptyStoredState(nextStorageKey, storedValue, nextState) {
+  // Older builds could leave `{ globalScript: "", urlRules: [] }` behind.
+  // Clean those up when loaded so storage only contains actionable domains.
+  if (typeof storedValue === "undefined" || createStorageSnapshot(nextState)) {
+    return;
+  }
+
+  try {
+    await chrome.storage.local.remove(nextStorageKey);
+  } catch (error) {
+    console.error("[Selector Action Rules] Failed to remove empty rules", {
+      storageKey: nextStorageKey,
+      error
+    });
+  }
+}
+
+function hasMeaningfulJavaScript(source) {
+  const trimmed = typeof source === "string" ? source.trim() : "";
+  return Boolean(trimmed && trimmed !== ACTION_SCRIPT_TEMPLATE.trim());
+}
+
+function hasMeaningfulCss(source) {
+  return Boolean(typeof source === "string" && source.trim());
+}
+
+function disposeEditors() {
+  if (globalEditor) {
+    globalEditor.toTextArea();
+    globalEditor = null;
+  }
+
+  disposeDynamicEditors();
+}
+
+function disposeDynamicEditors() {
+  cssEditors.forEach((editor) => editor.toTextArea());
+  rowEditors.forEach((editor) => editor.toTextArea());
+  cssEditors = [];
+  rowEditors = [];
 }
 
 function isPlainObject(value) {

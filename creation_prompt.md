@@ -16,6 +16,7 @@ Build this correctly in one pass. Avoid these known failure modes:
 - Use the **Chrome Side Panel API** for the UI.
 - A single extension icon click must open the Side Panel.
 - A second icon click within a short double-click window, for example `500ms`, must run the current domain's global script if `runOnExtensionClick` is enabled.
+- The Side Panel must refresh when the active tab changes or when the active tab navigates to a different domain.
 - Do **not** execute user scripts with `eval()` or `new Function()` in the content script or extension page. MV3 CSP blocks that.
 - Use `chrome.userScripts.execute()` for user-authored code.
 - Selector action handlers must use delegated `document` event handling, not `element.addEventListener()` on elements found at page load. This is required so elements added after page load work.
@@ -49,6 +50,8 @@ Store all state in `chrome.storage.local` under a key per domain:
   }
 }
 ```
+
+Do not leave empty domain entries in storage. If autosave sees no meaningful global JavaScript, URL-rule CSS, or selector action JavaScript for the current domain, remove `rules.<domain>` from `chrome.storage.local` instead of writing an empty object. Blank draft UI can remain visible until the user switches away or reloads the Side Panel.
 
 Fields:
 
@@ -120,6 +123,8 @@ Users may need to enable **Allow User Scripts** on the extension details page in
 
 The Side Panel should show rules for the active tab's domain. Extract the domain from the active tab URL using `chrome.tabs.query({ active: true, currentWindow: true })`.
 
+Because the Side Panel can stay open while users switch tabs, subscribe to active-tab and active-tab URL changes with `chrome.tabs` events and reload the displayed domain state when the active domain changes.
+
 Use `popup.html`, `popup.js`, and `popup.css` as the Side Panel UI.
 
 The UI must contain:
@@ -157,6 +162,8 @@ The UI must contain:
    - Import button opens a JSON file picker, parses JSON, merges/overwrites storage with `chrome.storage.local.set(imported)`, and refreshes the current domain UI
 
 Every input, checkbox, dropdown, and CodeMirror editor change must autosave on `input` or `change`. There must be no Save button.
+
+Autosave should prune storage-only empty drafts: adding an empty URL rule, changing only a regex, or leaving a new action row with only the default explanatory comment must not create a `rules.<domain>` key unless real JavaScript or CSS exists.
 
 New or empty action script editors should start with this comment:
 
@@ -333,6 +340,8 @@ After implementation, run at least these checks:
 - No `eval(` or `new Function` remains.
 - A mocked or browser-based test verifies:
   - Side Panel open is called on first action click.
+  - The Side Panel reloads when the active tab changes to another domain.
+  - Empty draft state removes or avoids creating the current `rules.<domain>` storage key.
   - A second action click within `500ms` runs the global script.
   - Matching URL-rule CSS is injected and non-matching URL-rule CSS is not injected.
   - Re-running CSS injection for the same URL rule replaces the existing managed style tag instead of creating duplicates.

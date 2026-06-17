@@ -7,6 +7,8 @@ The extension UI opens in Chrome's Side Panel so it can stay visible while you w
 ## What It Does
 
 - Stores rule sets per domain under keys such as `rules.example.com` in `chrome.storage.local`.
+- Refreshes the Side Panel when you switch to another active tab or domain.
+- Removes a domain key instead of keeping an empty object when no JavaScript or CSS is configured.
 - Provides a CodeMirror JavaScript editor for a domain-level global script.
 - Lets you add URL rule blocks, each with an optional regex matched against `window.location.href`.
 - Lets each URL rule inject CSS when its regex matches; an empty regex injects on all pages for the domain.

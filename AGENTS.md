@@ -77,6 +77,10 @@ Shape:
 
 Every UI input, checkbox, dropdown, and CodeMirror editor change must autosave. Do not add a Save button.
 
+The Side Panel is long-lived. It must refresh its loaded domain state when the active tab or active tab URL changes, instead of only reading the active tab once at startup.
+
+Do not persist empty domain objects. If a domain has no meaningful global JavaScript, URL-rule CSS, or selector action JavaScript, autosave should remove `rules.<domain>` from `chrome.storage.local` while allowing blank draft UI to remain on screen.
+
 ## UI Notes
 
 - The UI must remain usable at Side Panel widths. Avoid fixed wide body sizes.
