@@ -108,6 +108,7 @@ The extension requires Chrome 135 or newer.
 - `popup.html`: Side Panel UI shell.
 - `popup.js`: UI rendering, CodeMirror setup, autosave, import, and export.
 - `popup.css`: Side Panel styling.
+- `icons/`: transparent PNG extension and toolbar icons in Chrome's standard sizes.
 - `vendor/codemirror/`: local CodeMirror assets used by the editor.
 
 ## Notes

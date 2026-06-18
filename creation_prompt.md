@@ -86,6 +86,7 @@ Create:
 - `content.js`
 - `background.js`
 - `README.md`
+- transparent extension icons under `icons/` at 16, 32, 48, and 128 pixels
 - local CodeMirror assets under `vendor/codemirror/`
 
 Use CodeMirror 5 locally, not from a CDN, because extension pages should not rely on remote JavaScript and MV3 CSP blocks many remote/inline script patterns. 
@@ -117,7 +118,9 @@ Use Manifest V3 with:
   - `<all_urls>`
 - action:
   - `default_title`: `Selector Action Rules`
+  - `default_icon`: map 16, 32, 48, and 128 to the corresponding local PNG files
   - no `default_popup`
+- top-level `icons`: map 16, 32, 48, and 128 to the corresponding local PNG files
 - side panel:
   - `default_path`: `popup.html`
 - background:

@@ -14,6 +14,7 @@ Read `README.md` and `creation_prompt.md` before making large behavioral changes
 - `background.js`: service worker. Opens the Side Panel on normal toolbar click, runs the domain global script on toolbar double-click, and injects user-authored code with `chrome.userScripts.execute()`.
 - `content.js`: loads the current domain's rules at `document_idle`, filters URL rules, and asks the background worker to inject matching CSS plus selector action bindings.
 - `popup.html`, `popup.js`, `popup.css`: Side Panel UI. Despite the `popup` name, this is the Side Panel page.
+- `icons/`: generated transparent PNG extension icons. Keep manifest icon paths synchronized with these files.
 - `vendor/codemirror/`: local CodeMirror 5 assets. Do not replace with CDN scripts.
 - `README.md`: user-facing documentation.
 - `creation_prompt.md`: full one-shot prompt describing the desired extension behavior.
